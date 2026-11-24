@@ -1,0 +1,282 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           String        @id @default(uuid())
+  name         String
+  email        String        @unique
+  passwordHash String
+  role         String        @default("CUSTOMER") // SUPER_ADMIN, CATALOG_MANAGER, ASSET_MANAGER, PRICING_MANAGER, PRODUCTION_MANAGER, KARIGAR, CUSTOMER
+  phone        String?
+  address      String?
+  city         String?
+  state        String?
+  pincode      String?
+  designs      NecklaceDesign[]
+  orders       Order[]
+  assignedJobs ArtisanJob[]
+  inspections  QualityCheck[]
+  auditLogs    AuditLog[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model Category {
+  id           String     @id @default(uuid())
+  name         String
+  slug         String     @unique
+  description  String?
+  imageUrl     String?
+  displayOrder Int        @default(0)
+  products     Product[]
+  createdAt    DateTime   @default(now())
+}
+
+model Product {
+  id              String             @id @default(uuid())
+  sku             String             @unique
+  name            String
+  slug            String             @unique
+  categoryId      String
+  category        Category           @relation(fields: [categoryId], references: [id])
+  description     String
+  material        String
+  purity          String?
+  gemstones       String?
+  grossWeightGm   Float?
+  netGoldGm       Float?
+  dimensionsMm    String?            // JSON string: {width, height, depth}
+  basePrice       Float
+  makingCharges   Float              @default(0)
+  stockQuantity   Int                @default(10)
+  isCustomizable  Boolean            @default(false)
+  status          String             @default("PUBLISHED")
+  imagesJson      String             // JSON array of image URLs
+  threeDAssetId   String?            @unique
+  threeDAsset     Component3DAsset?  @relation(fields: [threeDAssetId], references: [id])
+  orderItems      OrderItem[]
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+}
+
+model Component3DAsset {
+  id                     String        @id @default(uuid())
+  sku                    String        @unique
+  name                   String
+  type                   String        // PENDANT, STRAND, CONNECTOR, SIDE_BROOCH, TEMPLE_BUTTI, SIGNATURE_MOTIF, SPACER_BAR, SPACER_BEAD, CLASP, THREAD
+  categorySubtype        String?       // "Lakshmi Temple", "Freshwater Pearl", "Kundan Bar"
+  status                 String        @default("APPROVED") // DRAFT, PROCESSING, AWAITING_ARTISAN_VERIFICATION, UNDER_REVIEW, APPROVED, PUBLISHED, ARCHIVED
+  version                Int           @default(1)
+  glbUrl                 String?
+  previewImageUrl        String
+  referencePhotosJson    String        // Multi-view photos: {front, back, side, angle, detail, loops}
+  dimensionsMm           String        // {width, height, depth}
+  weightGrams            Float?
+  metalType              String?       // "Antique 22k Gold Finish", "Silver Base 24k Gold Dip"
+  stoneType              String?       // "Jadau Kundan", "Freshwater Pearl", "Kemp Ruby & Emerald"
+  attachmentPointsJson   String        // Configured anchors [{id, name, type, position: [x,y,z], supportedStrands: [1,2,3,4,5], mechanism: "loop" | "bridge_bar"}]
+  compatibilityRulesJson String        // Allowed layers, strand compatibility, spacing rules
+  pbrSettingsJson        String        // {metalness: 0.9, roughness: 0.25, color: "#D4AF37", normalScale: 1}
+  originalImagePath      String?
+  generatedGlbPath       String?
+  thumbnailPath          String?
+  generationProvider     String?       // TRELLIS.2, TRELLIS, TRIPO_STUDIO, MANUAL_UPLOAD
+  generationStatus       String?       // PENDING, PROCESSING, COMPLETED, FAILED
+  product                Product?
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+}
+
+model ImageTo3DJob {
+  id                     String        @id @default(uuid())
+  jobId                  String        @unique
+  sku                    String
+  name                   String
+  category               String        @default("pendants")
+  originalImagePath      String
+  generatedGlbPath       String?
+  thumbnailPath          String?
+  generationProvider     String        @default("TRELLIS.2")
+  generationStatus       String        @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED
+  progressPercent        Int           @default(0)
+  statusMessage          String?
+  errorMessage           String?
+  dimensionsMm           String?       // JSON: {width, height, depth}
+  weightGrams            Float?
+  attachmentPointsJson   String?       // JSON array of named sockets
+  approvalStatus         String        @default("PENDING_REVIEW") // PENDING_REVIEW, APPROVED, REJECTED
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+}
+
+model NecklaceDesign {
+  id                  String       @id @default(uuid())
+  designCode          String       @unique // e.g. "SM-2026-8842"
+  title               String       @default("Bespoke Pearl & Temple Necklace")
+  customerId          String?
+  customer            User?        @relation(fields: [customerId], references: [id])
+  guestSessionId      String?
+  layersCount         Int          @default(3)
+  layersConfigJson    String       // Array of layers: [{layerIndex, strandSku, beadDiameterMm, lengthInches, dropCurveDepth, beadColor}]
+  pendantSku          String?
+  pendantConfigJson   String?      // {sku, scale, offsetMm, anchorPoint}
+  connectorsConfigJson String      // Array: [{componentSku, type, placement, quantityPairs, curvePositionPercent, connectedStrands}]
+  accentsConfigJson   String       // {patternType: "UNIFORM" | "ALTERNATING_GOLD" | "EVERY_5TH", beadSku, interval}
+  finishingConfigJson String       // {threadColor: "Soft Pink", claspSku: "s-hook-clasp", tasselType: "Pearl Clustered"}
+  pricingSnapshotJson String       // Detailed itemized breakdown
+  previewSnapshotUrl  String?
+  status              String       @default("SAVED") // DRAFT, SAVED, ORDERED
+  cartItems           CartItem[]
+  orders              Order[]
+  artisanJobs         ArtisanJob[]
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+}
+
+model CartItem {
+  id           String          @id @default(uuid())
+  sessionId    String
+  designId     String?
+  design       NecklaceDesign? @relation(fields: [designId], references: [id])
+  productId    String?
+  quantity     Int             @default(1)
+  unitPrice    Float
+  snapshotJson String          // Full frozen snapshot
+  createdAt    DateTime        @default(now())
+}
+
+model Order {
+  id                  String        @id @default(uuid())
+  orderNumber         String        @unique // e.g. "ORD-SM-2026-1049"
+  customerId          String?
+  customer            User?         @relation(fields: [customerId], references: [id])
+  customerName        String
+  customerEmail       String
+  customerPhone       String
+  shippingAddressJson String
+  billingAddressJson  String
+  designId            String?
+  design              NecklaceDesign? @relation(fields: [designId], references: [id])
+  subtotal            Float
+  makingCharges       Float         @default(0)
+  taxGst              Float         @default(0)
+  discount            Float         @default(0)
+  grandTotal          Float
+  paymentStatus       String        @default("PENDING") // PENDING, AUTHORIZED, PAID, FAILED, REFUNDED
+  paymentMethod       String        @default("RAZORPAY")
+  razorpayOrderId     String?
+  razorpayPaymentId   String?
+  razorpaySignature   String?
+  orderStatus         String        @default("CONFIRMED") // CONFIRMED, MATERIALS_PREPARATION, IN_PRODUCTION, QUALITY_CHECK, READY_TO_DISPATCH, SHIPPED, DELIVERED, CANCELLED
+  notes               String?
+  items               OrderItem[]
+  artisanJobs         ArtisanJob[]
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+}
+
+model OrderItem {
+  id           String   @id @default(uuid())
+  orderId      String
+  order        Order    @relation(fields: [orderId], references: [id])
+  productId    String?
+  product      Product? @relation(fields: [productId], references: [id])
+  productSku   String
+  productName  String
+  quantity     Int      @default(1)
+  unitPrice    Float
+  totalPrice   Float
+  snapshotJson String?
+  createdAt    DateTime @default(now())
+}
+
+model ArtisanJob {
+  id                   String        @id @default(uuid())
+  jobCode              String        @unique // e.g. "KRG-JOB-4081"
+  orderId              String
+  order                Order         @relation(fields: [orderId], references: [id])
+  designId             String
+  design               NecklaceDesign @relation(fields: [designId], references: [id])
+  assignedKarigarId    String?
+  assignedKarigar      User?         @relation(fields: [assignedKarigarId], references: [id])
+  karigarName          String?       @default("Master Karigar Ramesh Chander")
+  status               String        @default("AWAITING_ASSIGNMENT") // AWAITING_ASSIGNMENT, ACCEPTED, MATERIALS_PREPARATION, STRINGING, PENDANT_ATTACHMENT, CONNECTOR_ASSEMBLY, FINISHING, QUALITY_INSPECTION, APPROVED, PACKED, DISPATCHED
+  priority             String        @default("HIGH")
+  targetCompletionDate DateTime
+  bomJson              String        // Detailed BOM (SKUs, counts, weights, lengths)
+  productionNotes      String?
+  productionPhotosJson String        @default("[]") // Uploaded progress photos
+  karigarPayoutInr     Float         @default(3500)
+  qualityChecks        QualityCheck[]
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+}
+
+model QualityCheck {
+  id                   String     @id @default(uuid())
+  artisanJobId         String
+  artisanJob           ArtisanJob @relation(fields: [artisanJobId], references: [id])
+  inspectorId          String?
+  inspector            User?      @relation(fields: [inspectorId], references: [id])
+  inspectorName        String     @default("Senior Quality Assessor")
+  status               String     @default("PASSED") // PASSED, REWORK_REQUIRED, REJECTED
+  checklistJson        String     // 10-point checklist
+  comments             String?
+  inspectionPhotosJson String     @default("[]")
+  completedAt          DateTime   @default(now())
+}
+
+model PricingRule {
+  id          String   @id @default(uuid())
+  ruleKey     String   @unique
+  name        String
+  chargeType  String   // FIXED, PER_STRAND, PER_PAIR, PER_BEAD, PERCENTAGE
+  amountInr   Float
+  description String
+  isActive    Boolean  @default(true)
+  updatedAt   DateTime @updatedAt
+}
+
+model InventoryItem {
+  id               String   @id @default(uuid())
+  sku              String   @unique
+  componentName    String
+  category         String
+  availableStock   Int      @default(100)
+  reservedStock    Int      @default(0)
+  minThreshold     Int      @default(10)
+  unitOfMeasure    String   @default("pieces") // pieces, strands, grams, meters
+  supplierName     String   @default("Hyderabad Pearl Guild & Jaipur Jadau Atelier")
+  unitCostInr      Float
+  sellingPriceInr  Float
+  updatedAt        DateTime @updatedAt
+}
+
+model InventoryMovement {
+  id            String   @id @default(uuid())
+  sku           String
+  movementType  String   // PURCHASE, RESERVED, CONSUMED, ADJUSTMENT
+  quantity      Int
+  balanceAfter  Int
+  referenceId   String?  // Order ID or Purchase ID
+  notes         String?
+  createdAt     DateTime @default(now())
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+  action     String
+  entityType String
+  entityId   String
+  details    String?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+}
